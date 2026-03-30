@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "474594103373",
+    "project_id": "sae-ete",
+    "storage_bucket": "sae-ete.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:474594103373:android:56af4b67c41a8a5c0b0c04",
+        "android_client_info": {
+          "package_name": "saeemocional.com"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbIbj8Bau-QMByDJtmJzjGzkZFZlMSN7M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

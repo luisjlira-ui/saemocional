@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title> SAE - SISTEMA DE ANÁLISE EMOCIONAL | ETE EDUARDO CAMPOS</title>
+    
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#002663">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --pe-azul: #002663; --pe-verde: #009b3a; --pe-amarelo: #febf00;
+            --pe-vermelho: #e30613; --pe-laranja: #ff9f43;
+            --bg: #f8fafc; --text: #0f172a; --glass: rgba(255, 255, 255, 0.9);
+            --border: rgba(0, 38, 99, 0.1);
+        }
+
+        * { box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); margin: 0; min-height: 100vh; }
+
+        #splash { position: fixed; inset: 0; background: var(--pe-azul); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10000; transition: 0.6s; }
+        .loader { width: 45px; height: 45px; border: 4px solid rgba(255,255,255,0.1); border-top-color: var(--pe-amarelo); border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #toast { 
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); 
+            background: var(--pe-verde); color: white; padding: 15px 30px; 
+            border-radius: 50px; font-weight: 800; z-index: 30000; 
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2); display: none;
+            animation: slideDown 0.4s ease-out;
+        }
+        @keyframes slideDown { from { transform: translate(-50%, -100px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+        .view-content { flex: 1; padding: 20px; width: 100%; max-width: 1000px; margin: 0 auto; padding-bottom: 120px; }
+        .hidden { display: none !important; }
+
+        .grid-salas { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin-top: 15px; }
+
+        .btn-premium { 
+            background: var(--glass); border: 1px solid var(--border); padding: 12px 8px; border-radius: 12px; 
+            font-weight: 600; cursor: pointer; font-size: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); 
+            transition: transform 0.2s; display: flex; align-items: center; justify-content: center;
+        }
+        .btn-premium:active { transform: scale(0.95); }
+        .btn-perigo { border: 2px solid var(--pe-vermelho) !important; color: var(--pe-vermelho) !important; font-weight: 800 !important; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+        .chart-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 15px; }
+        .chart-container-admin { flex: 1; min-width: 280px; height: 220px; background: white; border-radius: 15px; padding: 15px; border: 1px solid var(--border); }
+
+        .vote-layout { display: flex; min-height: 450px; gap: 20px; margin-top: 10px; }
+        .termometro-wrapper { width: 55px; background: #e2e8f0; border-radius: 30px; border: 4px solid var(--pe-azul); position: relative; overflow: hidden; }
+        .nivel-pe { position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, var(--pe-vermelho), var(--pe-amarelo), var(--pe-verde)); transition: 1.2s ease-out; }
+
+        .nav-dock { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 500px; background: var(--glass); backdrop-filter: blur(15px); padding: 12px 25px; border-radius: 50px; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); box-shadow: 0 10px 40px rgba(0,0,0,0.2); z-index: 999; }
+        
+        #modalSenha { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 20000; backdrop-filter: blur(8px); }
+        .modal-caixa { background: white; padding: 30px; border-radius: 25px; width: 90%; max-width: 320px; text-align: center; }
+
+        .prontuario-container { background: #fff; border-radius: 12px; padding: 20px; border: 1px solid #cbd5e1; }
+        .registro-input { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; font-size: 1rem; min-height: 200px; }
+
+        @media (max-width: 600px) { .chart-row { flex-direction: column; } .vote-layout { flex-direction: row; height: 60vh; } }
+    </style>
+</head>
+<body>
+
+<div id="splash"><div class="loader"></div><h2 style="color:white; margin-top:20px;">SAE-SISTEMA DE ANÁLISE EMOCIONAL </h2></div>
+<div id="toast">✅ REGISTRO CONFIRMADO!</div>
+
+<div id="modalSenha" class="hidden">
+    <div class="modal-caixa">
+        <h3 style="color: var(--pe-azul)">ACESSO GESTOR</h3>
+        <input type="password" id="inputSenha" placeholder="****" inputmode="numeric" style="width:100%; padding:15px; margin-bottom:15px; text-align:center; font-size:1.5rem; border-radius:12px; border:2px solid #ddd;">
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-premium" onclick="fecharAdmin()" style="flex:1">VOLTAR</button>
+            <button class="btn-premium" onclick="validarSenha()" style="flex:1; background:var(--pe-azul); color:white;">ENTRAR</button>
+        </div>
+    </div>
+</div>
+
+<div id="app" class="hidden">
+    <div id="telaInicial" class="view-content">
+        <header style="text-align:center; padding: 10px 0;">
+            <div style="color: var(--pe-verde); font-weight: 800; font-size: 0.8rem;">ETE GOVERNADOR EDUARDO CAMPOS</div>
+            <h1 style="margin:5px 0; font-size: 1.6rem;">SAE - <span style="color:var(--pe-azul)">SISTEMA EMOCIONAL</span></h1>
+        </header>
+        <div class="grid-salas" id="listaTurmas"></div>
+    </div>
+
+    <div id="telaSala" class="view-content hidden">
+        <h3 id="nomeSala" style="text-align: center; color: var(--pe-azul); margin: 10px 0;">SALA</h3>
+        <div class="vote-layout">
+            <div class="termometro-wrapper"><div class="nivel-pe" id="nivel" style="height: 0%"></div></div>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 10px; justify-content: center;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div onclick="votar('muito feliz')" style="background:white; border-radius:12px; text-align:center; padding:12px; border-bottom:5px solid var(--pe-amarelo); cursor:pointer;"><img src="https://cdn-icons-png.flaticon.com/512/742/742920.png" width="40"><p style="font-size:0.6rem; font-weight:800;">RADIANTE</p></div>
+                    <div onclick="votar('feliz')" style="background:white; border-radius:12px; text-align:center; padding:12px; border-bottom:5px solid var(--pe-verde); cursor:pointer;"><img src="https://cdn-icons-png.flaticon.com/512/742/742751.png" width="40"><p style="font-size:0.6rem; font-weight:800;">FELIZ</p></div>
+                    <div onclick="votar('triste')" style="background:white; border-radius:12px; text-align:center; padding:12px; border-bottom:5px solid var(--pe-azul); cursor:pointer;"><img src="https://cdn-icons-png.flaticon.com/512/742/742752.png" width="40"><p style="font-size:0.6rem; font-weight:800;">TRISTE</p></div>
+                    <div onclick="votar('muito triste')" style="background:white; border-radius:12px; text-align:center; padding:12px; border-bottom:5px solid var(--pe-vermelho); cursor:pointer;"><img src="https://cdn-icons-png.flaticon.com/512/742/742774.png" width="40"><p style="font-size:0.6rem; font-weight:800;">FRUSTRADO</p></div>
+                </div>
+                <button class="btn-premium" onclick="votar('SOS')" style="border: 2px dashed var(--pe-vermelho); color: var(--pe-vermelho); padding: 12px;">🆘 S.O.S</button>
+                <button class="btn-premium" onclick="votar('BULLYING')" style="border: 2px solid var(--pe-azul); color: var(--pe-azul); padding: 12px;">🚫 BULLYING</button>
+                <button class="btn-premium" onclick="votar('CYBER')" style="border: 2px solid var(--pe-laranja); color: var(--pe-laranja); padding: 12px;">🌐 CYBER</button>
+                <button class="btn-premium" onclick="voltarInicio()" style="background: var(--pe-azul); color: white; padding: 15px;">SAIR DA SALA</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="painelGestor" class="view-content hidden">
+        <h2 id="tituloAdmin" style="color: var(--pe-azul); text-align: center;">RELATÓRIO GERAL</h2>
+        <div class="chart-row">
+            <div class="chart-container-admin"><canvas id="graficoAdmin"></canvas></div>
+            <div class="chart-container-admin"><canvas id="graficoAlertas"></canvas></div>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px;">
+            <button class="btn-premium" onclick="irParaApoio('SOS')" style="background: var(--pe-vermelho); color: white;">LISTA SOS</button>
+            <button class="btn-premium" onclick="irParaApoio('BULLYING')" style="background: var(--pe-azul); color: white;">BULLY</button>
+            <button class="btn-premium" onclick="irParaApoio('CYBER')" style="background: var(--pe-laranja); color: white;">CYBER</button>
+        </div>
+        <button class="btn-premium" onclick="escolaToda()" style="width: 100%; margin-bottom: 15px; background: #f1f5f9;">VER ESCOLA TODA</button>
+        
+        <h4 style="margin: 10px 0; border-left: 4px solid var(--pe-azul); padding-left: 10px;">MAPA DE TURMAS</h4>
+        <div class="grid-salas" id="listaTurmasAdmin"></div>
+        
+        <button class="btn-premium" onclick="voltarInicio()" style="width: 100%; background: #000; color: white; margin-top: 30px;">SAIR DO MODO GESTOR</button>
+        <button class="btn-premium" onclick="resetarDadosCloud()" style="width: 100%; color: var(--pe-vermelho); border: none; background: none; font-size: 0.6rem; margin-top: 10px;">APAGAR TODOS OS DADOS DA NUVEM</button>
+    </div>
+
+    <div id="telaApoio" class="view-content hidden">
+        <h2 id="tituloTelaApoio" style="text-align: center;">CHAMADOS</h2>
+        <div id="containerBotoesSOS" class="grid-salas"></div>
+        <button class="btn-premium" onclick="trocarTela('painelGestor')" style="width: 100%; background: var(--pe-azul); color: white; margin-top: 30px;">VOLTAR</button>
+    </div>
+
+    <div id="telaProntuario" class="view-content hidden">
+        <div class="prontuario-container">
+            <div style="text-align: center; font-weight: 800; border-bottom: 2px solid var(--pe-azul); margin-bottom: 15px; padding-bottom: 10px;">REGISTRO DE OCORRÊNCIA - SAE</div>
+            <div id="infoProntuario" style="margin-bottom: 10px; font-weight: 600;"></div>
+            <textarea class="registro-input" id="registroTexto" placeholder="Descreva o atendimento realizado aqui..."></textarea>
+        </div>
+        <button class="btn-premium" id="btnSalvarPDF" style="width:100%; background:var(--pe-verde); color:white; margin-top:20px; padding: 18px;">GERAR PDF OFICIAL</button>
+        <button class="btn-premium" onclick="trocarTela('telaApoio')" style="width: 100%; margin-top: 15px;">VOLTAR</button>
+    </div>
+
+    <nav class="nav-dock" id="mainNav">
+        <div id="clockNav" style="font-weight:800; font-size: 1.1rem;">00:00</div>
+        <button class="btn-premium" onclick="abrirModalAdmin()" style="background: var(--pe-azul); color: white; border-radius: 30px; padding: 8px 25px;">GESTOR</button>
+    </nav>
+</div>
+
+<script>
+    // CONFIGURAÇÃO FIREBASE
+    const firebaseConfig = {
+        apiKey: "SUA_API_KEY",
+        authDomain: "SAE-ETE.firebaseapp.com",
+        projectId: "SAE-ETE",
+        storageBucket: "SAE-ETE.appspot.com",
+        messagingSenderId: "ID",
+        appId: "APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let salaAtual = "", tipoAlertaAtual = "", todosVotos = [], chartAdmin, chartAlertas;
+    const salas = ["1 ADM A", "1 ADM B", "1 DG A", "1 DG B", "2 ADM A", "2 ADM B", "2 DG A", "2 DG B", "3 ADM A", "3 ADM B", "3 REDES A", "3 REDES B"];
+
+    window.onload = () => {
+        const gridE = document.getElementById('listaTurmas');
+        const gridA = document.getElementById('listaTurmasAdmin');
+        salas.forEach(s => {
+            gridE.innerHTML += `<button class="btn-premium" onclick="abrirSala('${s}')">${s}</button>`;
+            gridA.innerHTML += `<button id="btnAdmin-${s.replace(/ /g, '')}" class="btn-premium" onclick="analisarTurma('${s}')">${s}</button>`;
+        });
+        
+        escutarVotos();
+        setInterval(() => { document.getElementById('clockNav').innerText = new Date().toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}); }, 1000);
+        setTimeout(() => { document.getElementById('splash').style.display = 'none'; document.getElementById('app').classList.remove('hidden'); }, 1500);
+    };
+
+    function escutarVotos() {
+        db.collection("votos").onSnapshot((snapshot) => {
+            todosVotos = [];
+            snapshot.forEach(doc => todosVotos.push(doc.data()));
+            atualizarMapaRisco();
+            atualizarTermometro();
+        });
+    }
+
+    function votar(tipo) {
+        db.collection("votos").add({
+            tipo, sala: salaAtual, time: new Date().getTime()
+        }).then(() => {
+            const toast = document.getElementById('toast');
+            toast.innerText = (['SOS', 'BULLYING', 'CYBER'].includes(tipo)) ? "⚠️ ALERTA ENVIADO!" : "✅ REGISTRO CONFIRMADO!";
+            toast.style.display = 'block';
+            setTimeout(() => { toast.style.display = 'none'; }, 2000);
+        });
+    }
+
+    function abrirSala(n) { salaAtual = n; document.getElementById('nomeSala').innerText = n; trocarTela('telaSala'); atualizarTermometro(); }
+    
+    function trocarTela(id) {
+        ['telaInicial', 'telaSala', 'painelGestor', 'telaApoio', 'telaProntuario'].forEach(t => document.getElementById(t).classList.add('hidden'));
+        document.getElementById(id).classList.remove('hidden');
+        document.getElementById('mainNav').classList.toggle('hidden', id !== 'telaInicial');
+        window.scrollTo(0,0);
+    }
+
+    function atualizarTermometro() {
+        const filtrados = todosVotos.filter(v => v.sala === salaAtual && !['SOS', 'BULLYING', 'CYBER'].includes(v.tipo));
+        const pos = filtrados.filter(v => v.tipo.includes('feliz')).length;
+        document.getElementById('nivel').style.height = filtrados.length ? `${(pos/filtrados.length)*100}%` : "0%";
+    }
+
+    function validarSenha() { 
+        if(document.getElementById('inputSenha').value === "1234") { 
+            fecharAdmin(); trocarTela('painelGestor'); escolaToda();
+        } else { alert("Senha incorreta"); } 
+    }
+
+    function escolaToda() {
+        document.getElementById('tituloAdmin').innerText = "RELATÓRIO GERAL (ESCOLA)";
+        renderCharts(todosVotos);
+    }
+
+    function analisarTurma(s) {
+        document.getElementById('tituloAdmin').innerText = `RELATÓRIO: ${s}`;
+        renderCharts(todosVotos.filter(v => v.sala === s));
+    }
+
+    function renderCharts(dados) {
+        const v = dados.filter(v => !['SOS', 'BULLYING', 'CYBER'].includes(v.tipo));
+        const counts = [
+            v.filter(x => x.tipo === 'muito feliz').length,
+            v.filter(x => x.tipo === 'feliz').length,
+            v.filter(x => x.tipo === 'triste').length,
+            v.filter(x => x.tipo === 'muito triste').length
+        ];
+
+        const ctx1 = document.getElementById('graficoAdmin').getContext('2d');
+        if(chartAdmin) chartAdmin.destroy();
+        chartAdmin = new Chart(ctx1, {
+            type: 'doughnut',
+            data: { labels: ['R', 'F', 'T', 'FR'], datasets: [{ data: counts, backgroundColor: ['#febf00', '#009b3a', '#002663', '#e30613'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+
+        const alerts = [
+            dados.filter(x => x.tipo === 'BULLYING').length,
+            dados.filter(x => x.tipo === 'CYBER').length,
+            dados.filter(x => x.tipo === 'SOS').length
+        ];
+        const ctx2 = document.getElementById('graficoAlertas').getContext('2d');
+        if(chartAlertas) chartAlertas.destroy();
+        chartAlertas = new Chart(ctx2, {
+            type: 'bar',
+            data: { labels: ['BULLY', 'CYBER', 'SOS'], datasets: [{ data: alerts, backgroundColor: ['#002663', '#ff9f43', '#e30613'] }] },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    function atualizarMapaRisco() {
+        salas.forEach(s => {
+            const temAlerta = todosVotos.some(v => v.sala === s && ['SOS', 'BULLYING', 'CYBER'].includes(v.tipo));
+            const btn = document.getElementById(`btnAdmin-${s.replace(/ /g, '')}`);
+            if(btn) btn.classList.toggle('btn-perigo', temAlerta);
+        });
+    }
+
+    function irParaApoio(tipo) {
+        tipoAlertaAtual = tipo;
+        document.getElementById('tituloTelaApoio').innerText = `LISTA DE ${tipo}`;
+        trocarTela('telaApoio');
+        const container = document.getElementById('containerBotoesSOS');
+        container.innerHTML = "";
+        salas.forEach(s => {
+            const count = todosVotos.filter(v => v.sala === s && v.tipo === tipo).length;
+            if(count > 0) container.innerHTML += `<button class="btn-premium" onclick="abrirProntuario('${s}')">${s} (${count})</button>`;
+        });
+    }
+
+    function abrirProntuario(sala) {
+        salaAtual = sala;
+        document.getElementById('infoProntuario').innerText = `TURMA: ${sala} | MOTIVO: ${tipoAlertaAtual}`;
+        document.getElementById('registroTexto').value = "";
+        trocarTela('telaProntuario');
+        document.getElementById('btnSalvarPDF').onclick = () => gerarPDF(sala, tipoAlertaAtual);
+    }
+
+    function gerarPDF(sala, tipo) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text("SAE - ETE GOVERNADOR EDUARDO CAMPOS", 105, 20, {align:"center"});
+        doc.setFontSize(12);
+        doc.text(`OCORRÊNCIA: ${tipo} | SALA: ${sala}`, 20, 40);
+        doc.text(`DATA: ${new Date().toLocaleDateString('pt-BR')}`, 20, 50);
+        doc.text("RELATO DO ATENDIMENTO:", 20, 70);
+        const relato = document.getElementById('registroTexto').value;
+        doc.text(doc.splitTextToSize(relato, 170), 20, 80);
+        doc.save(`SAE_${sala}_${tipo}.pdf`);
+    }
+
+    function resetarDadosCloud() {
+        if(confirm("Isso apagará TODOS os votos da nuvem. Tem certeza?")) {
+            db.collection("votos").get().then((querySnapshot) => {
+                querySnapshot.forEach((doc) => { doc.ref.delete(); });
+            });
+        }
+    }
+
+    function abrirModalAdmin() { document.getElementById('modalSenha').classList.remove('hidden'); }
+    function fecharAdmin() { document.getElementById('modalSenha').classList.add('hidden'); }
+    function voltarInicio() { trocarTela('telaInicial'); }
+</script>
+</body>
+</html>
